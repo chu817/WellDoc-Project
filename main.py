@@ -1,112 +1,150 @@
-# AI-Driven Risk Prediction Engine for Chronic Care
+# Modular imports for streamlined architecture
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import matplotlib.pyplot as plt
-import seaborn as sns
-import shap
-import xgboost
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, classification_report
-from datetime import datetime, timedelta
 import warnings
-
-# Configure plotly for light theme
-import plotly.io as pio
-pio.templates.default = "plotly_white"
 warnings.filterwarnings('ignore')
 
-# Set page config for better layout
-st.set_page_config(
-    page_title="AI Risk Prediction Engine - Chronic Care",
-    page_icon="⚕️",
-    layout="wide",
-    initial_sidebar_state="expanded"
+# Import custom modules
+from config import (
+    APP_CONFIG, THEME_CONFIG, MODEL_CONFIG, DATA_CONFIG, NAVIGATION_OPTIONS,
+    get_custom_css, apply_theme_config, get_risk_category, get_risk_color,
+    format_medical_value, DEFAULT_PATIENT
+)
+from data_generator import generate_comprehensive_patient_data, generate_time_series_data
+from model_trainer import RiskPredictionModel, train_risk_prediction_models
+from visualization import (
+    create_risk_distribution_chart, create_age_risk_scatter, create_adherence_risk_chart,
+    create_comorbidity_analysis, create_patient_timeline_chart, create_feature_importance_chart,
+    create_risk_category_pie_chart, create_condition_risk_analysis
+)
+from utils import (
+    create_metric_card, display_risk_indicator, create_sidebar_section,
+    format_patient_summary, assess_clinical_values, display_clinical_assessment,
+    calculate_summary_statistics, create_patient_selector, generate_recommendations,
+    export_patient_report
 )
 
-# Force Streamlit to use light theme
-st._config.set_option('theme.base', 'light')
-st._config.set_option('theme.backgroundColor', '#ffffff')
-st._config.set_option('theme.secondaryBackgroundColor', '#f0f2f6')
-st._config.set_option('theme.textColor', '#262730')
+# App configuration
+st.set_page_config(**APP_CONFIG)
 
-# --- ENHANCED DATA SIMULATION & MODEL TRAINING ---
+# Apply theme settings
+apply_theme_config()
 
+# Initialize session state for navigation
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = "📊 Dashboard Overview"
+
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = False
+
+if 'model_trained' not in st.session_state:
+    st.session_state.model_trained = False
+
+# Load or generate data
 @st.cache_data
-def generate_comprehensive_patient_data():
+def load_patient_data():
+    """Load patient data from CSV or generate new data."""
+    try:
+        df = pd.read_csv(DATA_CONFIG['csv_filename'])
+        print(f"Loaded existing data: {len(df)} patients")
+        return df
+    except FileNotFoundError:
+        print("Generating new patient data...")
+        df = generate_comprehensive_patient_data(
+            num_patients=DATA_CONFIG['num_patients'],
+            save_to_csv=True,
+            filename=DATA_CONFIG['csv_filename']
+        )
+        return df
+
+# Load and train model
+@st.cache_resource
+def load_trained_model():
+    """Load or train the risk prediction model."""
+    model = RiskPredictionModel()
+    
+    # Try to load existing models
+    if model.load_models():
+        print("Loaded existing trained models")
+        df = load_patient_data()
+        df['Risk_Score'] = [model.predict_risk(df.iloc[i]) for i in range(len(df))]
+        return df, model.model_info, model
+    else:
+        print("Training new models...")
+        df, model_info, trained_model = train_risk_prediction_models(
+            csv_file=DATA_CONFIG['csv_filename'],
+            save_models=True
+        )
+        return df, model_info, trained_model
     """Generates realistic chronic care patient data with multiple conditions and risk factors."""
     np.random.seed(42)
     num_patients = 150
     
-    # Basic demographics
+    # Patient identifiers and basic demographics
     patient_ids = [f'CHR-{str(i).zfill(4)}' for i in range(1, num_patients + 1)]
     ages = np.random.normal(65, 12, num_patients).astype(int)
     ages = np.clip(ages, 35, 95)
     
     genders = np.random.choice(['Male', 'Female'], num_patients, p=[0.45, 0.55])
     
-    # Primary chronic conditions
+    # Common chronic conditions with realistic prevalence
     conditions = np.random.choice([
         'Type 2 Diabetes', 'Heart Failure', 'COPD', 'Hypertension', 
         'Chronic Kidney Disease', 'Obesity + Diabetes'
     ], num_patients, p=[0.25, 0.20, 0.15, 0.15, 0.15, 0.10])
     
-    # Comorbidity count (realistic for chronic patients)
     comorbidity_counts = np.random.poisson(2.5, num_patients)
     comorbidity_counts = np.clip(comorbidity_counts, 1, 6)
     
-    # Vital signs (with realistic ranges and correlations)
+    # Clinical measurements with realistic correlations
     systolic_bp = np.random.normal(140, 18, num_patients)
     diastolic_bp = systolic_bp * 0.6 + np.random.normal(10, 8, num_patients)
     heart_rate = np.random.normal(75, 12, num_patients)
     
-    # Lab values
-    hba1c = np.random.gamma(2, 3.5, num_patients)  # Diabetes marker
+    # Laboratory values
+    hba1c = np.random.gamma(2, 3.5, num_patients)
     hba1c = np.clip(hba1c, 5.5, 14.0)
     
-    creatinine = np.random.gamma(1.5, 0.8, num_patients)  # Kidney function
+    creatinine = np.random.gamma(1.5, 0.8, num_patients)
     creatinine = np.clip(creatinine, 0.6, 4.5)
     
     ldl_cholesterol = np.random.normal(130, 35, num_patients)
     ldl_cholesterol = np.clip(ldl_cholesterol, 70, 250)
     
-    # Medication adherence (realistic distribution)
+    # Behavioral and lifestyle factors
     med_adherence = np.random.beta(3, 1.5, num_patients)
     med_adherence = np.clip(med_adherence, 0.3, 1.0)
     
-    # Lifestyle factors
     steps_per_day = np.random.exponential(3500, num_patients).astype(int)
     steps_per_day = np.clip(steps_per_day, 500, 12000)
     
     bmi = np.random.normal(29, 6, num_patients)
     bmi = np.clip(bmi, 18, 45)
     
-    # Healthcare utilization
+    # Healthcare utilization patterns
     er_visits_6m = np.random.poisson(0.8, num_patients)
     missed_appointments = np.random.poisson(1.2, num_patients)
     
-    # Social determinants
+    # Social determinants of health
     insurance_types = np.random.choice(['Medicare', 'Medicaid', 'Private', 'Dual'], 
                                      num_patients, p=[0.4, 0.25, 0.25, 0.1])
     
-    # Social risk factors
     social_risk_score = np.random.normal(0.3, 0.15, num_patients)
     social_risk_score = np.clip(social_risk_score, 0, 1)
     
     distance_to_hospital = np.random.exponential(15, num_patients)
     distance_to_hospital = np.clip(distance_to_hospital, 1, 50)
     
-    # Days since last hospitalization
     days_since_last_hosp = np.random.exponential(180, num_patients).astype(int)
-    days_since_last_hosp = np.clip(days_since_last_hosp, 0, 1095)  # 0-3 years
+    days_since_last_hosp = np.clip(days_since_last_hosp, 0, 1095)
     
-    # Create DataFrame
+    # Compile all data into structured dataframe
     df = pd.DataFrame({
-        'PatientID': patient_ids,
+        'Patient_ID': patient_ids,
         'Age': ages,
         'Gender': genders,
         'Primary_Condition': conditions,
@@ -128,7 +166,7 @@ def generate_comprehensive_patient_data():
         'Days_Since_Last_Hosp': days_since_last_hosp
     })
     
-    # Create realistic deterioration risk based on clinical factors
+    # Calculate composite risk score using clinical factors with evidence-based weights
     risk_score = (
         (df['Age'] - 65) * 0.015 +
         df['Comorbidity_Count'] * 0.1 +
@@ -143,126 +181,47 @@ def generate_comprehensive_patient_data():
         np.random.normal(0, 0.25, num_patients)
     )
     
-    # Convert to probability and ensure balanced classes
+    # Convert to probability distribution and create balanced outcome variable
     prob_deterioration = 1 / (1 + np.exp(-risk_score))
-    # Adjust threshold to get approximately 30% positive cases
     threshold = np.percentile(prob_deterioration, 70)
     df['Risk_of_Deterioration_90d'] = (prob_deterioration > threshold).astype(int)
     df['Risk_Score'] = prob_deterioration
     
-    return df
+# Initialize data and models using modular approach
+df_patients, model_info, trained_model = load_trained_model()
 
-@st.cache_resource
-def train_advanced_risk_model(df):
-    """Trains multiple ML models for risk prediction with comprehensive evaluation."""
-    
-    # Select features for modeling
-    feature_cols = [
-        'Age', 'Comorbidity_Count', 'Systolic_BP', 'Diastolic_BP', 'Heart_Rate',
-        'HbA1c', 'Creatinine', 'LDL_Cholesterol', 'Med_Adherence', 'Steps_Per_Day',
-        'BMI', 'ER_Visits_6M', 'Missed_Appointments', 'Days_Since_Last_Hosp'
-    ]
-    
-    X = df[feature_cols]
-    y = df['Risk_of_Deterioration_90d']
-    
-    # Train-test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
-    
-    # Train XGBoost model
-    xgb_model = xgboost.XGBClassifier(
-        eval_metric='logloss',
-        random_state=42,
-        n_estimators=100,
-        max_depth=6,
-        learning_rate=0.1
-    )
-    xgb_model.fit(X_train, y_train)
-    
-    # Train Random Forest for comparison
-    rf_model = RandomForestClassifier(
-        n_estimators=100,
-        random_state=42,
-        max_depth=8
-    )
-    rf_model.fit(X_train, y_train)
-    
-    # Generate predictions
-    xgb_pred_proba = xgb_model.predict_proba(X)[:, 1]
-    rf_pred_proba = rf_model.predict_proba(X)[:, 1]
-    
-    # Ensemble prediction (weighted average)
-    ensemble_pred = 0.7 * xgb_pred_proba + 0.3 * rf_pred_proba
-    df['Risk_Score'] = ensemble_pred
-    
-    # Calculate model performance metrics
-    xgb_auc = roc_auc_score(y_test, xgb_model.predict_proba(X_test)[:, 1])
-    rf_auc = roc_auc_score(y_test, rf_model.predict_proba(X_test)[:, 1])
-    
-    # SHAP explainer
-    explainer = shap.TreeExplainer(xgb_model)
-    shap_values = explainer.shap_values(X)
-    
-    model_info = {
-        'xgb_model': xgb_model,
-        'rf_model': rf_model,
-        'explainer': explainer,
-        'shap_values': shap_values,
-        'feature_cols': feature_cols,
-        'xgb_auc': xgb_auc,
-        'rf_auc': rf_auc,
-        'X': X
-    }
-    
-    return model_info, df
-
-def generate_time_series_data(patient_data, days=90):
-    """Generate realistic time series data for a patient over the last 90 days."""
-    dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
-    
-    # Base values with realistic trends and noise
-    systolic_trend = patient_data['Systolic_BP'] + np.cumsum(np.random.normal(0, 0.5, days))
-    diastolic_trend = patient_data['Diastolic_BP'] + np.cumsum(np.random.normal(0, 0.3, days))
-    hba1c_trend = patient_data['HbA1c'] + np.cumsum(np.random.normal(0, 0.02, days))
-    steps_trend = patient_data['Steps_Per_Day'] + np.cumsum(np.random.normal(0, 100, days))
-    
-    return pd.DataFrame({
-        'Date': dates,
-        'Systolic_BP': np.clip(systolic_trend, 90, 200),
-        'Diastolic_BP': np.clip(diastolic_trend, 50, 120),
-        'HbA1c': np.clip(hba1c_trend, 5.0, 15.0),
-        'Steps': np.clip(steps_trend, 0, 15000),
-        'Weight_kg': patient_data['BMI'] * 2.5 + np.random.normal(0, 0.5, days)  # Approximate weight
-    })
-
-# Load and process data
-df_patients = generate_comprehensive_patient_data()
-model_info, df_with_predictions = train_advanced_risk_model(df_patients)
+# Calculate summary statistics
+summary_stats = calculate_summary_statistics(df_patients)
 
 # --- PROFESSIONAL DASHBOARD UI ---
 
-# Custom CSS for professional medical design
+# Professional styling and layout configuration
 st.markdown("""
 <style>
-    /* Import Google Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     
-    /* Light Theme Base Styles */
     .stApp {
         background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
         color: #1e293b;
         font-family: 'Inter', sans-serif;
     }
     
-    /* Main container styling */
     .main .block-container {
-        padding-top: 2rem;
+        padding-top: 0rem !important;
+        margin-top: 0rem !important;
         padding-bottom: 2rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
         background: transparent;
         max-width: 95%;
     }
     
-    /* Professional Headers */
+    div[data-testid="stSidebar"] > div {
+        padding-top: 0rem !important;
+        margin-top: 0rem !important;
+    }
+    
+    /* Header styling */
     .main-header {
         font-size: 3.2rem;
         font-weight: 800;
@@ -283,7 +242,7 @@ st.markdown("""
         font-weight: 400;
     }
     
-    /* Compact Card Styles with Glass Morphism */
+    /* Card components with glass morphism effect */
     .metric-card, .plot-container {
         background: rgba(255, 255, 255, 0.85);
         backdrop-filter: blur(20px);
@@ -315,7 +274,7 @@ st.markdown("""
         background: rgba(255, 255, 255, 0.95);
     }
     
-    /* Dark Risk Level Indicators - Integrated Design */
+    /* Risk level styling with color coding */
     .high-risk {
         border: 1px solid rgba(239, 68, 68, 0.4) !important;
         background: rgba(239, 68, 68, 0.1) !important;
@@ -346,12 +305,11 @@ st.markdown("""
         background: linear-gradient(90deg, #10b981 0%, #34d399 50%, #6ee7b7 100%) !important;
     }
     
-    /* Light Sidebar Styling */
+    /* Sidebar styling */
     .css-1d391kg {
         background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
     }
     
-    /* Comprehensive light sidebar styling */
     .stSidebar {
         background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%) !important;
     }
@@ -408,7 +366,7 @@ st.markdown("""
         margin: 0 0 0.75rem 0 !important;
     }
     
-    /* Enhanced Light Section Headers */
+    /* Section headers */
     .section-header {
         font-size: 2rem;
         font-weight: 700;
@@ -453,7 +411,7 @@ st.markdown("""
         background: #10b981;
     }
     
-    /* Compact Medical Metrics */
+    /* Medical metrics styling */
     .medical-metric {
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
@@ -500,7 +458,7 @@ st.markdown("""
         line-height: 1.2;
     }
     
-    /* Light themed Button Styles */
+    /* Button styling */
     .stButton > button {
         background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
         color: #166534 !important;
@@ -538,7 +496,7 @@ st.markdown("""
         left: 100%;
     }
     
-    /* Dark Tab Styles */
+    /* Tab styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.5rem;
         background: rgba(255, 255, 255, 0.9);
@@ -571,7 +529,7 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
     }
     
-    /* Enhanced Status Indicators */
+    /* Status indicators */
     .status-high { 
         color: #ef4444 !important; 
         background: rgba(239, 68, 68, 0.2) !important;
@@ -603,12 +561,12 @@ st.markdown("""
         display: inline-block !important;
     }
     
-    /* Spacing Utilities */
+    /* Spacing utilities */
     .spacing-lg { margin: 2.5rem 0; }
     .spacing-md { margin: 1.5rem 0; }
     .spacing-sm { margin: 1rem 0; }
     
-    /* Risk Score Display */
+    /* Risk score display */
     .risk-score-large {
         font-size: 3.5rem !important;
         font-weight: 700 !important;
@@ -623,35 +581,12 @@ st.markdown("""
         margin: 0 !important;
     }
     
-    /* High Risk Alert Integration - Natural Design */
-    .risk-alert-banner {
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(239, 68, 68, 0.4);
-        border-radius: 12px;
-        padding: 1rem 1.5rem;
-        margin: 1rem 0;
-        backdrop-filter: blur(20px);
-        position: relative;
-        overflow: hidden;
-        box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2);
-    }
-    
-    .risk-alert-banner::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #ef4444 0%, #f87171 100%);
-    }
-    
-    /* Hide Streamlit branding */
+    /* Hide Streamlit default elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Light theme for Streamlit components */
+    /* Component styling overrides for consistent light theme */
     .stSelectbox > div > div {
         background-color: rgba(255, 255, 255, 0.9) !important;
         color: #1e293b !important;
@@ -669,459 +604,309 @@ st.markdown("""
         color: #1e293b !important;
     }
     
-    /* Clean table styling - force light theme from scratch */
-    /* Remove all dark/black styling and force consistent light theme */
-    
-    /* Base container for all dataframes */
-    div[data-testid="stDataFrame"],
-    .stDataFrame,
-    [data-testid="dataframe"] {
-        background: #ffffff !important;
-        border-radius: 12px !important;
-        border: 1px solid rgba(148, 163, 184, 0.3) !important;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
-        overflow: hidden !important;
+    div[data-testid="stDataFrame"] {
+        background: white !important;
     }
     
-    /* All nested divs within dataframes */
-    div[data-testid="stDataFrame"] > div,
-    .stDataFrame > div,
-    [data-testid="dataframe"] > div {
-        background: #ffffff !important;
-    }
-    
-    /* Actual table element */
-    div[data-testid="stDataFrame"] table,
-    .stDataFrame table,
-    [data-testid="dataframe"] table {
-        background: #ffffff !important;
-        color: #1e293b !important;
-        border-collapse: collapse !important;
-        width: 100% !important;
-        font-family: 'Inter', sans-serif !important;
-    }
-    
-    /* Table headers */
-    div[data-testid="stDataFrame"] table thead,
-    .stDataFrame table thead,
-    [data-testid="dataframe"] table thead {
-        background: #f8fafc !important;
-    }
-    
-    div[data-testid="stDataFrame"] table th,
-    .stDataFrame table th,
-    [data-testid="dataframe"] table th {
-        background: #f8fafc !important;
-        color: #1e293b !important;
-        font-weight: 600 !important;
-        font-size: 0.875rem !important;
-        padding: 12px 16px !important;
-        border-bottom: 2px solid #e2e8f0 !important;
-        border-right: 1px solid #e2e8f0 !important;
-        text-align: left !important;
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 10 !important;
-    }
-    
-    /* Table body */
-    div[data-testid="stDataFrame"] table tbody,
-    .stDataFrame table tbody,
-    [data-testid="dataframe"] table tbody {
-        background: #ffffff !important;
-    }
-    
-    div[data-testid="stDataFrame"] table td,
-    .stDataFrame table td,
-    [data-testid="dataframe"] table td {
-        background: #ffffff !important;
-        color: #1e293b !important;
-        padding: 12px 16px !important;
-        border-bottom: 1px solid #f1f5f9 !important;
-        border-right: 1px solid #f1f5f9 !important;
-        font-size: 0.875rem !important;
-        font-weight: 400 !important;
-    }
-    
-    /* Table row hover effects */
-    div[data-testid="stDataFrame"] tbody tr:hover td,
-    .stDataFrame tbody tr:hover td,
-    [data-testid="dataframe"] tbody tr:hover td {
-        background: #f0fdf4 !important;
+    div[data-testid="stDataFrame"] * {
         color: #1e293b !important;
     }
     
-    /* First column styling (usually IDs) */
-    div[data-testid="stDataFrame"] table td:first-child,
-    .stDataFrame table td:first-child,
-    [data-testid="dataframe"] table td:first-child {
-        font-weight: 600 !important;
-        color: #10b981 !important;
+    # Primary button styling for main actions
+    .stButton > button:active {
+        background: linear-gradient(135deg, #bbf7d0 0%, #86efac 100%) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15) !important;
     }
     
-    /* Table scrollbar styling */
-    div[data-testid="stDataFrame"] table::-webkit-scrollbar,
-    .stDataFrame table::-webkit-scrollbar {
-        width: 8px !important;
-        height: 8px !important;
+    /* Secondary button styling */
+    .secondary-button {
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%) !important;
+        color: #475569 !important;
+        border: 1px solid #cbd5e1 !important;
     }
     
-    div[data-testid="stDataFrame"] table::-webkit-scrollbar-track,
-    .stDataFrame table::-webkit-scrollbar-track {
-        background: #f1f5f9 !important;
-        border-radius: 4px !important;
+    .secondary-button:hover {
+        background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%) !important;
+        color: #334155 !important;
     }
     
-    div[data-testid="stDataFrame"] table::-webkit-scrollbar-thumb,
-    .stDataFrame table::-webkit-scrollbar-thumb {
-        background: #cbd5e1 !important;
-        border-radius: 4px !important;
+    /* Input field styling */
+    .stSelectbox > div[data-baseweb="select"] {
+        border: 1px solid rgba(148, 163, 184, 0.4) !important;
+        border-radius: 8px !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+        transition: all 0.3s ease !important;
     }
     
-    div[data-testid="stDataFrame"] table::-webkit-scrollbar-thumb:hover,
-    .stDataFrame table::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8 !important;
+    .stSelectbox > div[data-baseweb="select"]:hover {
+        border-color: rgba(16, 185, 129, 0.5) !important;
+        box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1) !important;
     }
     
-    /* Light Radio Button Styling */
-    .stRadio > div {
-        background: rgba(255, 255, 255, 0.9) !important;
-        border-radius: 12px !important;
-        padding: 1rem !important;
-        border: 1px solid rgba(148, 163, 184, 0.3) !important;
-    }
-    
-    .stRadio > div > label {
+    .stSelectbox > div[data-baseweb="select"] > div {
         color: #1e293b !important;
         font-weight: 500 !important;
     }
     
-    .stRadio > div > label > div {
-        color: #64748b !important;
-    }
-    
-    /* Patient Info Grid */
-    .patient-info-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 1rem;
+    /* Chart container styling */
+    .chart-container {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 12px;
+        padding: 1.5rem;
         margin: 1rem 0;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        position: relative;
+        overflow: hidden;
     }
     
-    /* Additional light theme overrides for Streamlit components */
-    .stButton > button {
-        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
-        color: #166534 !important;
-        border: 1px solid #bbf7d0 !important;
+    .chart-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%);
+        opacity: 0.7;
     }
     
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%) !important;
-        color: #14532d !important;
-        border-color: #86efac !important;
+    /* Progress bar styling */
+    .stProgress > div > div > div {
+        background: linear-gradient(90deg, #10b981 0%, #34d399 100%) !important;
+        border-radius: 4px !important;
     }
     
-    /* Light theme slider styling */
-    .stSlider > div > div > div {
-        background: rgba(255, 255, 255, 0.9) !important;
+    .stProgress > div > div {
+        background: rgba(148, 163, 184, 0.2) !important;
+        border-radius: 4px !important;
     }
     
-    /* Ultra-comprehensive light theme overrides for ALL elements */
-    
-    /* Force all backgrounds to be light */
-    .stApp, .main .block-container, .sidebar .sidebar-content {
-        background: #ffffff !important;
-        color: #1e293b !important;
+    /* Alert styling */
+    .alert-info {
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        border-left: 4px solid #3b82f6;
+        color: #1e3a8a;
+        padding: 1rem;
+        border-radius: 0 8px 8px 0;
+        margin: 1rem 0;
+        font-weight: 500;
     }
     
-    /* All metric containers and cards */
-    div[data-testid="metric-container"],
-    .element-container,
-    .stMarkdown,
-    .stDataFrame,
-    .stSelectbox,
-    .stTextInput,
-    .stNumberInput,
-    .stSlider,
-    .stRadio,
-    .stCheckbox {
-        background: transparent !important;
-        color: #1e293b !important;
+    .alert-warning {
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        border-left: 4px solid #f59e0b;
+        color: #92400e;
+        padding: 1rem;
+        border-radius: 0 8px 8px 0;
+        margin: 1rem 0;
+        font-weight: 500;
     }
     
-    /* Force all buttons to light theme */
-    button, .stButton > button, [data-testid="baseButton-secondary"] {
-        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
-        color: #166534 !important;
-        border: 1px solid #bbf7d0 !important;
+    .alert-success {
+        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        border-left: 4px solid #10b981;
+        color: #065f46;
+        padding: 1rem;
+        border-radius: 0 8px 8px 0;
+        margin: 1rem 0;
+        font-weight: 500;
     }
     
-    button:hover, .stButton > button:hover, [data-testid="baseButton-secondary"]:hover {
-        background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%) !important;
-        color: #14532d !important;
-        border-color: #86efac !important;
-    }
-    
-    /* Force sidebar to be light */
-    .css-1d391kg, .sidebar .sidebar-content, [data-testid="stSidebar"] {
-        background: #f8fafc !important;
-        color: #1e293b !important;
-    }
-    
-    /* All text and labels */
-    p, h1, h2, h3, h4, h5, h6, span, div, label {
-        color: #1e293b !important;
-    }
-    
-    /* Force all containers to light background */
-    div[class*="css-"], section[class*="css-"] {
-        background: rgba(255, 255, 255, 0.9) !important;
-    }
-    
-    /* Comprehensive light theme overrides for all Streamlit components */
-    .element-container {
-        background: transparent !important;
-    }
-    
-    /* Ultra-specific table styling to force light theme */
-    div[data-testid="stDataFrame"] table,
-    .stDataFrame table,
-    [data-testid="dataframe"] table {
-        background: #ffffff !important;
-        color: #1e293b !important;
+    /* Table styling improvements */
+    .dataframe {
         border: none !important;
+        border-radius: 8px !important;
+        overflow: hidden !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
     }
     
-    div[data-testid="stDataFrame"] table th,
-    .stDataFrame table th,
-    [data-testid="dataframe"] table th {
-        background: #f8fafc !important;
-        color: #1e293b !important;
+    .dataframe th {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%) !important;
+        color: #374151 !important;
         font-weight: 600 !important;
-        border-bottom: 1px solid #e2e8f0 !important;
-        border-right: 1px solid #e2e8f0 !important;
+        padding: 0.75rem !important;
+        text-align: left !important;
+        border-bottom: 2px solid #e5e7eb !important;
     }
     
-    div[data-testid="stDataFrame"] table td,
-    .stDataFrame table td,
-    [data-testid="dataframe"] table td {
-        background: #ffffff !important;
-        color: #1e293b !important;
-        border-bottom: 1px solid #f1f5f9 !important;
-        border-right: 1px solid #f1f5f9 !important;
+    .dataframe td {
+        padding: 0.75rem !important;
+        border-bottom: 1px solid #f3f4f6 !important;
+        color: #374151 !important;
+        vertical-align: middle !important;
     }
     
-    div[data-testid="stDataFrame"] tbody tr:hover td,
-    .stDataFrame tbody tr:hover td,
-    [data-testid="dataframe"] tbody tr:hover td {
-        background: #f0fdf4 !important;
-        color: #1e293b !important;
-    }
-    
-    /* Force dataframe container backgrounds */
-    div[data-testid="stDataFrame"],
-    .stDataFrame,
-    [data-testid="dataframe"] {
-        background: #ffffff !important;
-    }
-    
-    div[data-testid="stDataFrame"] > div,
-    .stDataFrame > div,
-    [data-testid="dataframe"] > div {
-        background: #ffffff !important;
-    }
-    
-    /* Text input styling */
-    .stTextInput > div > div > input {
-        background: rgba(255, 255, 255, 0.9) !important;
-        color: #1e293b !important;
-        border: 1px solid rgba(148, 163, 184, 0.3) !important;
-    }
-    
-    /* Number input styling */
-    .stNumberInput > div > div > input {
-        background: rgba(255, 255, 255, 0.9) !important;
-        color: #1e293b !important;
-        border: 1px solid rgba(148, 163, 184, 0.3) !important;
-    }
-    
-    /* Multiselect styling */
-    .stMultiSelect > div > div {
-        background: rgba(255, 255, 255, 0.9) !important;
-        color: #1e293b !important;
-        border: 1px solid rgba(148, 163, 184, 0.3) !important;
-    }
-    
-    /* Container styling */
-    .css-1kyxreq {
-        background: transparent !important;
-    }
-    
-    .css-12oz5g7 {
-        background: transparent !important;
-    }
-    
-    /* Block container styling */
-    .block-container {
-        background: transparent !important;
-    }
-    
-    /* Code styling */
-    .stCode {
-        background: rgba(255, 255, 255, 0.9) !important;
-        border: 1px solid rgba(148, 163, 184, 0.3) !important;
-    }
-    
-    /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] {
-        background: rgba(255, 255, 255, 0.9) !important;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background: rgba(255, 255, 255, 0.9) !important;
-        color: #1e293b !important;
+    .dataframe tr:hover {
+        background: rgba(249, 250, 251, 0.8) !important;
     }
     
     /* Expander styling */
     .streamlit-expanderHeader {
         background: rgba(255, 255, 255, 0.9) !important;
+        border: 1px solid rgba(148, 163, 184, 0.3) !important;
+        border-radius: 8px !important;
         color: #1e293b !important;
+        font-weight: 600 !important;
     }
     
     .streamlit-expanderContent {
-        background: rgba(255, 255, 255, 0.9) !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+        border: 1px solid rgba(148, 163, 184, 0.3) !important;
+        border-top: none !important;
+        border-radius: 0 0 8px 8px !important;
     }
     
-    /* Alert/info box styling */
-    .stAlert {
-        background: rgba(255, 255, 255, 0.9) !important;
+    /* Text input styling */
+    .stTextInput > div > div > input {
+        background: rgba(255, 255, 255, 0.95) !important;
         color: #1e293b !important;
+        border: 1px solid rgba(148, 163, 184, 0.4) !important;
+        border-radius: 8px !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: rgba(16, 185, 129, 0.6) !important;
+        box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1) !important;
+    }
+    
+    /* Radio button styling */
+    .stRadio > div {
+        background: rgba(255, 255, 255, 0.9) !important;
+        border-radius: 8px !important;
+        padding: 0.5rem !important;
         border: 1px solid rgba(148, 163, 184, 0.3) !important;
     }
     
-    /* Progress bar styling */
-    .stProgress .st-bo {
-        background: rgba(255, 255, 255, 0.9) !important;
-    }
-    
-    /* Column styling */
-    .css-1r6slb0 {
-        background: transparent !important;
-    }
-    
-    /* Plotly figure container */
-    .js-plotly-plot {
-        background: transparent !important;
-    }
-    
-    /* Override any remaining dark backgrounds */
-    div[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%) !important;
-    }
-    
-    div[data-testid="stSidebar"] > div {
-        background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%) !important;
-    }
-    
-    /* Main content area */
-    .main .block-container {
-        background: transparent !important;
-    }
-    
-    /* Widget styling */
-    .Widget > label {
+    .stRadio > div > label {
         color: #1e293b !important;
     }
     
     /* Checkbox styling */
-    .stCheckbox {
+    .stCheckbox > label {
+        color: #1e293b !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Slider styling */
+    .stSlider > div > div > div {
         color: #1e293b !important;
     }
     
-    /* File uploader styling */
-    .stFileUploader {
-        background: rgba(255, 255, 255, 0.9) !important;
-        border: 1px solid rgba(148, 163, 184, 0.3) !important;
+    .stSlider [data-baseweb="slider"] {
+        background: rgba(148, 163, 184, 0.3) !important;
     }
     
-    /* Pulse animation for high-risk alerts */
-    @keyframes pulse {
-        0%, 100% { 
-            box-shadow: 0 8px 32px rgba(239, 68, 68, 0.2);
+    .stSlider [role="slider"] {
+        background: #10b981 !important;
+    }
+    
+    /* Number input styling */
+    .stNumberInput > div > div > input {
+        background: rgba(255, 255, 255, 0.95) !important;
+        color: #1e293b !important;
+        border: 1px solid rgba(148, 163, 184, 0.4) !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Spacing and layout utilities */
+    .header-container {
+        text-align: center;
+        margin: 2rem 0 3rem 0;
+        padding: 2rem;
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(20px);
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .header-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #10b981 0%, #34d399 50%, #6ee7b7 100%);
+    }
+    
+    .header-container h1 {
+        color: #1e293b !important;
+        font-size: 2.5rem !important;
+        font-weight: 700 !important;
+        margin: 0 0 0.5rem 0 !important;
+    }
+    
+    .header-container p {
+        color: #64748b !important;
+        font-size: 1.1rem !important;
+        margin: 0 !important;
+    }
+    
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .header-container h1 {
+            font-size: 2rem !important;
         }
-        50% { 
-            box-shadow: 0 16px 48px rgba(239, 68, 68, 0.4);
-            transform: translateY(-1px);
+        
+        .section-header {
+            font-size: 1.5rem !important;
+            padding: 1rem !important;
+        }
+        
+        .medical-metric {
+            padding: 0.75rem !important;
+        }
+        
+        .chart-container {
+            padding: 1rem !important;
         }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state for sidebar
+# Navigation state management
 if 'sidebar_collapsed' not in st.session_state:
     st.session_state.sidebar_collapsed = False
 
-# Main header with burger menu (always visible)
+# Toggle sidebar visibility
 if st.button("☰ Menu", key="burger_toggle", help="Toggle navigation sidebar"):
     st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
 
-# Professional header styling - positioned at top of page
+# Main application header
 st.markdown(f"""
 <style>
-/* Remove default Streamlit top padding/margin */
 .main .block-container {{
-    padding-top: 1rem !important;
+    padding-top: 0rem !important;
     margin-top: 0 !important;
 }}
 
-/* Remove sidebar top padding */
 .stSidebar .block-container {{
-    padding-top: 1rem !important;
+    padding-top: 0rem !important;
     margin-top: 0 !important;
 }}
 
-/* Remove any extra spacing from elements */
 .stApp > header {{
     display: none !important;
 }}
 </style>
 
 <div style="margin-top: 0; margin-bottom: 2rem;">
-    <div style="text-align: center; margin-bottom: 1rem; position: relative;">
+    <div class="header-container">
         <h1 class="main-header">AI-Driven Risk Prediction Engine</h1>
         <p class="sub-header">Advanced Chronic Care Management & 90-Day Deterioration Prediction</p>
-        <div style="
-            position: absolute;
-            top: 0;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid rgba(148, 163, 184, 0.3);
-            border-radius: 20px;
-            padding: 0.5rem 1rem;
-            font-size: 0.8rem;
-            color: #64748b;
-            backdrop-filter: blur(20px);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        ">
-            <div style="
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
-                background: {'#10b981' if not st.session_state.sidebar_collapsed else '#6b7280'};
-                box-shadow: 0 0 10px {'rgba(16, 185, 129, 0.5)' if not st.session_state.sidebar_collapsed else 'rgba(107, 114, 128, 0.3)'};
-            "></div>
-            <span>Navigation {'Active' if not st.session_state.sidebar_collapsed else 'Hidden'}</span>
-        </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Professional burger menu styling
+# Menu button styling for professional appearance
 st.markdown("""
 <style>
-/* Professional light burger menu styling */
 div[data-testid="column"]:first-child button {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%) !important;
     border: 1px solid rgba(148, 163, 184, 0.3) !important;
@@ -1154,7 +939,6 @@ div[data-testid="column"]:first-child button:active {
     transition: all 0.1s ease !important;
 }
 
-/* Add subtle animation when sidebar state changes */
 div[data-testid="column"]:first-child button::before {
     content: '';
     position: absolute;
@@ -1172,14 +956,14 @@ div[data-testid="column"]:first-child button:hover::before {
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar for navigation and model info (conditionally display)
+# Conditional sidebar display based on user preference
 if not st.session_state.sidebar_collapsed:
     with st.sidebar:
-        # Remove top spacing from sidebar
+        # Remove extra padding from sidebar top
         st.markdown("""
         <style>
         .stSidebar .block-container {
-            padding-top: 0.5rem !important;
+            padding-top: 0rem !important;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -1244,10 +1028,10 @@ if not st.session_state.sidebar_collapsed:
         </div>
         """, unsafe_allow_html=True)
         
-        total_patients = len(df_with_predictions)
-        high_risk = len(df_with_predictions[df_with_predictions['Risk_Score'] > 0.7])
-        medium_risk = len(df_with_predictions[(df_with_predictions['Risk_Score'] > 0.4) & (df_with_predictions['Risk_Score'] <= 0.7)])
-        low_risk = len(df_with_predictions[df_with_predictions['Risk_Score'] <= 0.4])
+        total_patients = len(df_patients)
+        high_risk = len(df_patients[df_patients['Risk_Score'] > 0.7])
+        medium_risk = len(df_patients[(df_patients['Risk_Score'] > 0.4) & (df_patients['Risk_Score'] <= 0.7)])
+        low_risk = len(df_patients[df_patients['Risk_Score'] <= 0.4])
         
         # Clean metrics layout
         st.markdown(f"""
@@ -1460,7 +1244,7 @@ if view_mode == "Cohort Overview":
                 <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 1rem;">Advanced Risk Stratification & Clinical Intelligence</p>
             </div>
             <div style="text-align: right;">
-                <div style="font-size: 2.5rem; font-weight: 800; color: #10b981; margin: 0;">{len(df_with_predictions)}</div>
+                <div style="font-size: 2.5rem; font-weight: 800; color: #10b981; margin: 0;">{len(df_patients)}</div>
                 <div style="font-size: 0.9rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Total Patients</div>
             </div>
         </div>
@@ -1468,9 +1252,9 @@ if view_mode == "Cohort Overview":
     """, unsafe_allow_html=True)
     
     # Integrated risk summary cards
-    high_risk_patients = df_with_predictions[df_with_predictions['Risk_Score'] > 0.7]
-    medium_risk_patients = df_with_predictions[(df_with_predictions['Risk_Score'] > 0.4) & (df_with_predictions['Risk_Score'] <= 0.7)]
-    low_risk_patients = df_with_predictions[df_with_predictions['Risk_Score'] <= 0.4]
+    high_risk_patients = df_patients[df_patients['Risk_Score'] > 0.7]
+    medium_risk_patients = df_patients[(df_patients['Risk_Score'] > 0.4) & (df_patients['Risk_Score'] <= 0.7)]
+    low_risk_patients = df_patients[df_patients['Risk_Score'] <= 0.4]
     
     col1, col2, col3, col4 = st.columns(4, gap="medium")
     
@@ -1505,7 +1289,7 @@ if view_mode == "Cohort Overview":
         """, unsafe_allow_html=True)
     
     with col4:
-        avg_risk = df_with_predictions['Risk_Score'].mean() * 100
+        avg_risk = df_patients['Risk_Score'].mean() * 100
         risk_trend = "RISING" if avg_risk > 50 else "DECLINING" if avg_risk < 30 else "STABLE"
         trend_color = "#ef4444" if avg_risk > 50 else "#10b981" if avg_risk < 30 else "#f59e0b"
         st.markdown(f"""
@@ -1536,7 +1320,7 @@ if view_mode == "Cohort Overview":
         """, unsafe_allow_html=True)
         
         # Enhanced patient table with sophisticated highlighting
-        display_df = df_with_predictions[['PatientID', 'Age', 'Primary_Condition', 'Comorbidity_Count', 
+        display_df = df_patients[['Patient_ID', 'Age', 'Primary_Condition', 'Comorbidity_Count', 
                                         'Med_Adherence', 'Days_Since_Last_Hosp', 'ER_Visits_6M', 'Risk_Score']].copy()
         display_df['Risk_Score'] = display_df['Risk_Score'] * 100
         display_df = display_df.sort_values('Risk_Score', ascending=False).reset_index(drop=True)
@@ -1552,55 +1336,6 @@ if view_mode == "Cohort Overview":
                 return ['background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px; color: #92400e; font-weight: 500; padding: 0.5rem;'] * len(row)
             else:
                 return ['background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 6px; color: #065f46; font-weight: 500; padding: 0.5rem;'] * len(row)
-        
-        # Simple, clean table styling that loads immediately
-        st.markdown("""
-        <style>
-        /* Force immediate light theme on table load */
-        div[data-testid="stDataFrame"] {
-            background: white !important;
-        }
-        
-        div[data-testid="stDataFrame"] table {
-            background: white !important;
-            color: #1e293b !important;
-        }
-        
-        div[data-testid="stDataFrame"] th {
-            background: #f8fafc !important;
-            color: #1e293b !important;
-            font-weight: 600 !important;
-        }
-        
-        div[data-testid="stDataFrame"] td {
-            background: white !important;
-            color: #1e293b !important;
-        }
-        
-        /* Force all text elements in table to light theme */
-        div[data-testid="stDataFrame"] * {
-            color: #1e293b !important;
-        }
-        
-        /* Ensure styled dataframe cells maintain light colors */
-        div[data-testid="stDataFrame"] .row_heading {
-            color: #1e293b !important;
-        }
-        
-        div[data-testid="stDataFrame"] .col_heading {
-            color: #1e293b !important;
-        }
-        
-        div[data-testid="stDataFrame"] .data {
-            color: #1e293b !important;
-        }
-        
-        /* Override any pandas styling */
-        div[data-testid="stDataFrame"] table tbody tr td {
-            color: #1e293b !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
         
         st.dataframe(
             display_df.style.apply(color_risk_row, axis=1).format({
@@ -1731,12 +1466,12 @@ if view_mode == "Cohort Overview":
         
         # Clean Age vs Risk scatter plot
         fig_age = px.scatter(
-            df_with_predictions, 
+            df_patients, 
             x='Age', 
             y='Risk_Score',
             color='Primary_Condition',
             title='',
-            hover_data=['PatientID', 'Comorbidity_Count'],
+            hover_data=['Patient_ID', 'Comorbidity_Count'],
             color_discrete_sequence=['#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899']
         )
         fig_age.update_layout(
@@ -1788,12 +1523,12 @@ if view_mode == "Cohort Overview":
         
         # Clean Medication adherence scatter plot
         fig_med = px.scatter(
-            df_with_predictions, 
+            df_patients, 
             x='Med_Adherence', 
             y='Risk_Score',
             color='ER_Visits_6M',
             title='',
-            hover_data=['PatientID', 'Primary_Condition'],
+            hover_data=['Patient_ID', 'Primary_Condition'],
             color_continuous_scale=[[0, '#10b981'], [0.5, '#f59e0b'], [1, '#ef4444']]
         )
         fig_med.update_layout(
@@ -1842,7 +1577,7 @@ if view_mode == "Cohort Overview":
         """, unsafe_allow_html=True)
         
         # Clean Comorbidity histogram
-        df_with_risk_category = df_with_predictions.copy()
+        df_with_risk_category = df_patients.copy()
         df_with_risk_category['Risk_Category'] = pd.cut(
             df_with_risk_category['Risk_Score'], 
             bins=[0, 0.4, 0.7, 1.0], 
@@ -1906,9 +1641,9 @@ elif view_mode == "Patient Deep Dive":
         </div>
         """, unsafe_allow_html=True)
         
-        high_risk_patients = df_with_predictions[df_with_predictions['Risk_Score'] > 0.7]['PatientID'].tolist()
-        medium_risk_patients = df_with_predictions[(df_with_predictions['Risk_Score'] > 0.4) & (df_with_predictions['Risk_Score'] <= 0.7)]['PatientID'].tolist()
-        low_risk_patients = df_with_predictions[df_with_predictions['Risk_Score'] <= 0.4]['PatientID'].tolist()
+        high_risk_patients = df_patients[df_patients['Risk_Score'] > 0.7]['Patient_ID'].tolist()
+        medium_risk_patients = df_patients[(df_patients['Risk_Score'] > 0.4) & (df_patients['Risk_Score'] <= 0.7)]['Patient_ID'].tolist()
+        low_risk_patients = df_patients[df_patients['Risk_Score'] <= 0.4]['Patient_ID'].tolist()
         
         risk_filter = st.selectbox(
             "Filter by Risk Level", 
@@ -1923,7 +1658,7 @@ elif view_mode == "Patient Deep Dive":
         elif risk_filter == "Low Risk":
             available_patients = low_risk_patients
         else:
-            available_patients = df_with_predictions['PatientID'].tolist()
+            available_patients = df_patients['Patient_ID'].tolist()
         
         selected_patient_id = st.selectbox(
             "Patient ID", 
@@ -1932,8 +1667,8 @@ elif view_mode == "Patient Deep Dive":
         )
     
     if selected_patient_id:
-        patient_data = df_with_predictions[df_with_predictions['PatientID'] == selected_patient_id].iloc[0]
-        patient_index = df_with_predictions[df_with_predictions['PatientID'] == selected_patient_id].index[0]
+        patient_data = df_patients[df_patients['Patient_ID'] == selected_patient_id].iloc[0]
+        patient_index = df_patients[df_patients['Patient_ID'] == selected_patient_id].index[0]
         
         with col2:
             # Professional patient header info
@@ -2493,7 +2228,7 @@ else:  # Model Analytics
         
         with col2:
             # Feature correlation heatmap
-            feature_corr = df_with_predictions[model_info['feature_cols']].corr()
+            feature_corr = df_patients[model_info['feature_cols']].corr()
             
             fig_corr = px.imshow(
                 feature_corr,
@@ -2582,7 +2317,7 @@ else:  # Model Analytics
         
         # Risk score distribution
         fig_dist = px.histogram(
-            df_with_predictions,
+            df_patients,
             x='Risk_Score',
             nbins=30,
             title='Risk Score Distribution Across Cohort',
@@ -2604,8 +2339,8 @@ else:  # Model Analytics
         st.info("Model calibration ensures predicted probabilities match actual outcomes. Well-calibrated models have predictions close to the diagonal line.")
         
         # Create calibration plot (simplified)
-        risk_bins = pd.cut(df_with_predictions['Risk_Score'], bins=10)
-        calibration_df = df_with_predictions.groupby(risk_bins, observed=False).agg({
+        risk_bins = pd.cut(df_patients['Risk_Score'], bins=10)
+        calibration_df = df_patients.groupby(risk_bins, observed=False).agg({
             'Risk_Score': 'mean',
             'Risk_of_Deterioration_90d': 'mean'
         }).reset_index(drop=True)
