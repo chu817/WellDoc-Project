@@ -71,7 +71,15 @@ def load_trained_model():
     if model.load_models():
         print("Loaded existing trained models")
         df = load_patient_data()
-        df['Risk_Score'] = [model.predict_risk(df.iloc[i]) for i in range(len(df))]
+        
+        # Check if Risk_Score already exists, if not compute it efficiently
+        if 'Risk_Score' not in df.columns:
+            print("Computing risk scores for all patients...")
+            df['Risk_Score'] = model.predict_batch(df)
+            # Save the updated CSV with risk scores to avoid recomputation
+            df.to_csv(DATA_CONFIG['csv_filename'], index=False)
+            print("Risk scores computed and saved to CSV")
+        
         return df, model.model_info, model
     else:
         print("Training new models...")
@@ -1301,10 +1309,13 @@ if view_mode == "Cohort Overview":
         </div>
         """, unsafe_allow_html=True)
     
-    # Advanced Risk Analysis Section
+
+    
     st.markdown('<div class="spacing-lg"></div>', unsafe_allow_html=True)
     
-    # Enhanced patient table with integrated design
+
+    
+    # Professional layout: Table + Pie Chart 
     col1, col2 = st.columns([7, 3], gap="large")
     
     with col1:
@@ -1319,14 +1330,39 @@ if view_mode == "Cohort Overview":
         </div>
         """, unsafe_allow_html=True)
         
-        # Enhanced patient table with sophisticated highlighting
-        display_df = df_patients[['Patient_ID', 'Age', 'Primary_Condition', 'Comorbidity_Count', 
-                                        'Med_Adherence', 'Days_Since_Last_Hosp', 'ER_Visits_6M', 'Risk_Score']].copy()
-        display_df['Risk_Score'] = display_df['Risk_Score'] * 100
-        display_df = display_df.sort_values('Risk_Score', ascending=False).reset_index(drop=True)
+        # Enhanced patient table with pagination (same as before)
+        full_display_df = df_patients[['Patient_ID', 'Age', 'Primary_Condition', 'Comorbidity_Count', 
+                                      'Med_Adherence', 'Days_Since_Last_Hosp', 'ER_Visits_6M', 'Risk_Score']].copy()
+        full_display_df['Risk_Score'] = full_display_df['Risk_Score'] * 100
+        full_display_df = full_display_df.sort_values('Risk_Score', ascending=False).reset_index(drop=True)
+        
+        # Pagination controls
+        patients_per_page = 100
+        total_patients = len(full_display_df)
+        total_pages = (total_patients + patients_per_page - 1) // patients_per_page
+        
+        col1_inner, col2_inner, col3_inner = st.columns([2, 1, 2])
+        with col2_inner:
+            page_num = st.selectbox(
+                f"Page (Total: {total_patients:,} patients)", 
+                range(1, total_pages + 1),
+                index=0,
+                help=f"Showing {patients_per_page} patients per page",
+                key="patient_table_pagination"
+            )
+        
+        # Calculate page boundaries
+        start_idx = (page_num - 1) * patients_per_page
+        end_idx = start_idx + patients_per_page
+        display_df = full_display_df.iloc[start_idx:end_idx].copy()
+        
         display_df['Risk_Category'] = pd.cut(display_df['Risk_Score'], 
                                            bins=[0, 40, 70, 100], 
                                            labels=['Low', 'Medium', 'High'])
+        
+        # Show current page info
+        st.markdown(f"**Showing patients {start_idx + 1:,} - {min(end_idx, total_patients):,} of {total_patients:,} total patients** (Sorted by Risk Score)")
+        st.markdown('<div class="spacing-sm"></div>', unsafe_allow_html=True)
         
         # Light theme optimized color coding with better contrast
         def color_risk_row(row):
@@ -1348,15 +1384,19 @@ if view_mode == "Cohort Overview":
         )
     
     with col2:
-        # Risk distribution with refined styling
+        # Risk distribution pie chart (compact sidebar version)
         st.markdown("""
         <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px);">
             <h3 style="margin: 0 0 1.5rem 0; font-size: 1.4rem; font-weight: 600; color: #1e293b;">Risk Distribution</h3>
         </div>
         """, unsafe_allow_html=True)
         
-        # Professional risk distribution chart with exact color matching
-        risk_dist = display_df['Risk_Category'].value_counts()
+        # Professional risk distribution chart using FULL dataset (50k patients)
+        full_risk_scores = df_patients['Risk_Score'] * 100
+        full_risk_categories = pd.cut(full_risk_scores, 
+                                     bins=[0, 40, 70, 100], 
+                                     labels=['Low', 'Medium', 'High'])
+        risk_dist = full_risk_categories.value_counts()
         
         # Ensure correct ordering and color mapping
         category_order = ['High', 'Medium', 'Low']
@@ -1391,9 +1431,9 @@ if view_mode == "Cohort Overview":
         )
         fig_pie.update_layout(
             showlegend=True,
-            height=350,
-            margin=dict(t=30, b=30, l=30, r=30),
-            font=dict(size=11, color="#1e293b", family="Inter"),
+            height=400,  # Compact size for sidebar
+            margin=dict(t=50, b=80, l=50, r=50),
+            font=dict(size=12, color="#1e293b", family="Inter"),
             legend=dict(
                 orientation="h", 
                 yanchor="bottom", 
@@ -1408,41 +1448,29 @@ if view_mode == "Cohort Overview":
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)'
         )
-        st.plotly_chart(fig_pie, width='stretch')
-        
-        # Key insights panel
-        st.markdown(f"""
-        <div class="medical-metric" style="margin-top: 1.5rem; background: rgba(255, 255, 255, 0.95); border: 1px solid rgba(148, 163, 184, 0.3);">
-            <div class="medical-metric-label">Key Insights</div>
-            <div style="margin: 1rem 0;">
-                <div style="color: #ef4444; font-weight: 600; margin: 0.5rem 0;">• {len(high_risk_patients)} patients need immediate intervention</div>
-                <div style="color: #f59e0b; font-weight: 500; margin: 0.5rem 0;">• {len(medium_risk_patients)} patients require monitoring</div>
-                <div style="color: #10b981; font-weight: 500; margin: 0.5rem 0;">• {len(low_risk_patients)} patients stable</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.plotly_chart(fig_pie, use_container_width=True, height=400)
     
     st.markdown('<div class="spacing-lg"></div>', unsafe_allow_html=True)
     
-    # Enhanced Risk Factor Analysis with Executive Dashboard Style
+    # Patient Risk Dashboard Header
     st.markdown(f"""
     <div class="section-header" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); border: 1px solid rgba(148, 163, 184, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-                <h2 style="margin: 0; font-size: 2rem; font-weight: 700;">Advanced Risk Analytics</h2>
-                <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 1rem;">Predictive Insights & Clinical Correlations</p>
+                <h2 style="margin: 0; font-size: 2rem; font-weight: 700;">📊 Patient Risk Dashboard</h2>
+                <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 1rem;">Risk Stratification & Analytics for 50,000 Patients</p>
             </div>
             <div style="display: flex; gap: 1rem; align-items: center;">
                 <div style="text-align: center;">
-                    <div style="font-size: 1.2rem; font-weight: 700; color: #ef4444;">{len(high_risk_patients)}</div>
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #ef4444;">{len(high_risk_patients):,}</div>
                     <div style="font-size: 0.8rem; color: #64748b;">Critical</div>
                 </div>
                 <div style="text-align: center;">
-                    <div style="font-size: 1.2rem; font-weight: 700; color: #f59e0b;">{len(medium_risk_patients)}</div>
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #f59e0b;">{len(medium_risk_patients):,}</div>
                     <div style="font-size: 0.8rem; color: #64748b;">Monitor</div>
                 </div>
                 <div style="text-align: center;">
-                    <div style="font-size: 1.2rem; font-weight: 700; color: #10b981;">{len(low_risk_patients)}</div>
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #10b981;">{len(low_risk_patients):,}</div>
                     <div style="font-size: 0.8rem; color: #64748b;">Stable</div>
                 </div>
             </div>
@@ -1450,182 +1478,184 @@ if view_mode == "Cohort Overview":
     </div>
     """, unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns(3, gap="large")
+    st.markdown('<div class="spacing-lg"></div>', unsafe_allow_html=True)
     
-    with col1:
-        st.markdown("""
-        <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0.5rem 0;">
-                <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #1e293b;">Age Distribution & Risk</h4>
-                <div style="background: rgba(16, 185, 129, 0.2); padding: 0.15rem 0.5rem; border-radius: 8px; font-size: 0.65rem; color: #10b981; font-weight: 600;">
-                    CORRELATION
-                </div>
+    # Advanced Analytics Section Header
+    st.markdown(f"""
+    <div class="section-header" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); border: 1px solid rgba(148, 163, 184, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h2 style="margin: 0; font-size: 2rem; font-weight: 700;">🔍 Advanced Risk Analytics</h2>
+                <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 1rem;">Large-Scale Predictive Insights & Clinical Correlations</p>
             </div>
         </div>
-        """, unsafe_allow_html=True)
-        
-        # Clean Age vs Risk scatter plot
-        fig_age = px.scatter(
-            df_patients, 
-            x='Age', 
-            y='Risk_Score',
-            color='Primary_Condition',
-            title='',
-            hover_data=['Patient_ID', 'Comorbidity_Count'],
-            color_discrete_sequence=['#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899']
-        )
-        fig_age.update_layout(
-            height=300,
-            margin=dict(t=30, b=100, l=60, r=30),
-            font=dict(size=10, color="#1e293b", family="Inter"),
-            legend=dict(
-                orientation="h", 
-                yanchor="bottom", 
-                y=-0.5, 
-                xanchor="center", 
-                x=0.5,
-                bgcolor="rgba(255, 255, 255, 0.98)",
-                bordercolor="rgba(148, 163, 184, 0.3)",
-                borderwidth=1,
-                font=dict(size=9),
-                itemwidth=30
-            ),
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(
-                gridcolor='rgba(148, 163, 184, 0.3)', 
-                color="#1e293b",
-                title_font_size=11,
-                tickfont_size=9,
-                title="Age"
-            ),
-            yaxis=dict(
-                gridcolor='rgba(148, 163, 184, 0.3)', 
-                color="#1e293b",
-                title_font_size=11,
-                tickfont_size=9,
-                title="Risk Score"
-            )
-        )
-        st.plotly_chart(fig_age, width='stretch')
+    </div>
+    """, unsafe_allow_html=True)
     
-    with col2:
-        st.markdown("""
-        <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0.5rem 0;">
-                <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #1e293b;">Adherence Impact</h4>
-                <div style="background: rgba(245, 158, 11, 0.2); padding: 0.15rem 0.5rem; border-radius: 8px; font-size: 0.65rem; color: #f59e0b; font-weight: 600;">
-                    MEDICATION
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Clean Medication adherence scatter plot
-        fig_med = px.scatter(
-            df_patients, 
-            x='Med_Adherence', 
-            y='Risk_Score',
-            color='ER_Visits_6M',
-            title='',
-            hover_data=['Patient_ID', 'Primary_Condition'],
-            color_continuous_scale=[[0, '#10b981'], [0.5, '#f59e0b'], [1, '#ef4444']]
-        )
-        fig_med.update_layout(
-            height=300,
-            margin=dict(t=30, b=80, l=60, r=100),
-            font=dict(size=10, color="#1e293b", family="Inter"),
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(
-                gridcolor='rgba(148, 163, 184, 0.3)', 
-                color="#1e293b",
-                title_font_size=11,
-                tickfont_size=9,
-                title="Medication Adherence"
-            ),
-            yaxis=dict(
-                gridcolor='rgba(148, 163, 184, 0.3)', 
-                color="#1e293b",
-                title_font_size=11,
-                tickfont_size=9,
-                title="Risk Score"
-            ),
-            coloraxis_colorbar=dict(
-                bgcolor="rgba(255, 255, 255, 0.98)",
-                bordercolor="rgba(148, 163, 184, 0.3)",
-                borderwidth=1,
-                tickcolor="#1e293b",
-                tickfont=dict(size=9),
-                title=dict(text="ER Visits", font=dict(size=10)),
-                len=0.8,
-                thickness=15
-            )
-        )
-        st.plotly_chart(fig_med, width='stretch')
+    st.markdown('<div class="spacing-lg"></div>', unsafe_allow_html=True)
     
-    with col3:
-        st.markdown("""
-        <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0.5rem 0;">
-                <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: #1e293b;">Comorbidity Profile</h4>
-                <div style="background: rgba(139, 92, 246, 0.2); padding: 0.15rem 0.5rem; border-radius: 8px; font-size: 0.65rem; color: #8b5cf6; font-weight: 600;">
-                    COMPLEXITY
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Clean Comorbidity histogram
-        df_with_risk_category = df_patients.copy()
-        df_with_risk_category['Risk_Category'] = pd.cut(
-            df_with_risk_category['Risk_Score'], 
-            bins=[0, 0.4, 0.7, 1.0], 
-            labels=['Low', 'Medium', 'High']
+    # ==== THE THREE LARGE CHARTS (as requested) ====
+    
+    # CHART 1: Age vs Risk Correlation (Large)
+    st.markdown("""
+    <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); margin-bottom: 3rem;">
+        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">📈 Age vs Risk Correlation Analysis</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    fig_age = px.scatter(
+        df_patients, 
+        x='Age', 
+        y='Risk_Score',
+        color='Primary_Condition',
+        title='',
+        hover_data=['Patient_ID', 'Comorbidity_Count'],
+        color_discrete_sequence=['#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899']
+    )
+    fig_age.update_layout(
+        height=700,  # Large
+        margin=dict(t=80, b=160, l=100, r=100),
+        font=dict(size=16, color="#1e293b", family="Inter"),
+        legend=dict(
+            orientation="h", 
+            yanchor="bottom", 
+            y=-0.35, 
+            xanchor="center", 
+            x=0.5,
+            bgcolor="rgba(255, 255, 255, 0.98)",
+            bordercolor="rgba(148, 163, 184, 0.4)",
+            borderwidth=2,
+            font=dict(size=14),
+            itemwidth=80
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(
+            gridcolor='rgba(148, 163, 184, 0.3)', 
+            color="#1e293b",
+            title_font_size=18,
+            tickfont_size=14,
+            title="Age"
+        ),
+        yaxis=dict(
+            gridcolor='rgba(148, 163, 184, 0.3)', 
+            color="#1e293b",
+            title_font_size=18,
+            tickfont_size=14,
+            title="Risk Score"
         )
-        
-        fig_comorb = px.histogram(
-            df_with_risk_category, 
-            x='Comorbidity_Count',
-            color='Risk_Category',
-            title='',
-            color_discrete_map={'High': '#ef4444', 'Medium': '#f59e0b', 'Low': '#10b981'},
-            barmode='group'
+    )
+    st.plotly_chart(fig_age, use_container_width=True, height=700)
+    
+    st.markdown('<div class="spacing-lg"></div>', unsafe_allow_html=True)
+    
+    # CHART 2: Medication Adherence Impact (Large)
+    st.markdown("""
+    <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); margin-bottom: 3rem;">
+        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">💊 Medication Adherence Impact Analysis</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    fig_med = px.scatter(
+        df_patients, 
+        x='Med_Adherence', 
+        y='Risk_Score',
+        color='ER_Visits_6M',
+        title='',
+        hover_data=['Patient_ID', 'Primary_Condition'],
+        color_continuous_scale=[[0, '#10b981'], [0.5, '#f59e0b'], [1, '#ef4444']]
+    )
+    fig_med.update_layout(
+        height=700,  # Large
+        margin=dict(t=80, b=140, l=100, r=160),
+        font=dict(size=16, color="#1e293b", family="Inter"),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(
+            gridcolor='rgba(148, 163, 184, 0.3)', 
+            color="#1e293b",
+            title_font_size=18,
+            tickfont_size=14,
+            title="Medication Adherence"
+        ),
+        yaxis=dict(
+            gridcolor='rgba(148, 163, 184, 0.3)', 
+            color="#1e293b",
+            title_font_size=18,
+            tickfont_size=14,
+            title="Risk Score"
+        ),
+        coloraxis_colorbar=dict(
+            bgcolor="rgba(255, 255, 255, 0.98)",
+            bordercolor="rgba(148, 163, 184, 0.4)",
+            borderwidth=2,
+            tickcolor="#1e293b",
+            tickfont=dict(size=14),
+            title=dict(text="ER Visits", font=dict(size=16)),
+            len=0.8,
+            thickness=25
         )
-        fig_comorb.update_layout(
-            height=300,
-            margin=dict(t=30, b=100, l=60, r=30),
-            font=dict(size=10, color="#1e293b", family="Inter"),
-            legend=dict(
-                orientation="h", 
-                yanchor="bottom", 
-                y=-0.5, 
-                xanchor="center", 
-                x=0.5,
-                bgcolor="rgba(255, 255, 255, 0.98)",
-                bordercolor="rgba(148, 163, 184, 0.3)",
-                borderwidth=1,
-                font=dict(size=9),
-                itemwidth=30
-            ),
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(
-                gridcolor='rgba(148, 163, 184, 0.3)', 
-                color="#1e293b",
-                title_font_size=11,
-                tickfont_size=9,
-                title="Comorbidity Count"
-            ),
-            yaxis=dict(
-                gridcolor='rgba(148, 163, 184, 0.3)', 
-                color="#1e293b",
-                title_font_size=11,
-                tickfont_size=9,
-                title="Patient Count"
-            )
+    )
+    st.plotly_chart(fig_med, use_container_width=True, height=700)
+    
+    st.markdown('<div class="spacing-lg"></div>', unsafe_allow_html=True)
+    
+    # CHART 3: Comorbidity Distribution & Risk Analysis (Large)
+    st.markdown("""
+    <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); margin-bottom: 3rem;">
+        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">🏥 Comorbidity Distribution & Risk Analysis</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    df_with_risk_category = df_patients.copy()
+    df_with_risk_category['Risk_Category'] = pd.cut(
+        df_with_risk_category['Risk_Score'], 
+        bins=[0, 0.4, 0.7, 1.0], 
+        labels=['Low', 'Medium', 'High']
+    )
+    
+    fig_comorb = px.histogram(
+        df_with_risk_category, 
+        x='Comorbidity_Count',
+        color='Risk_Category',
+        title='',
+        color_discrete_map={'High': '#ef4444', 'Medium': '#f59e0b', 'Low': '#10b981'},
+        barmode='group'
+    )
+    fig_comorb.update_layout(
+        height=700,  # Large
+        margin=dict(t=80, b=160, l=120, r=100),
+        font=dict(size=16, color="#1e293b", family="Inter"),
+        legend=dict(
+            orientation="h", 
+            yanchor="bottom", 
+            y=-0.35, 
+            xanchor="center", 
+            x=0.5,
+            bgcolor="rgba(255, 255, 255, 0.98)",
+            bordercolor="rgba(148, 163, 184, 0.4)",
+            borderwidth=2,
+            font=dict(size=14),
+            itemwidth=80
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(
+            gridcolor='rgba(148, 163, 184, 0.3)', 
+            color="#1e293b",
+            title_font_size=18,
+            tickfont_size=14,
+            title="Comorbidity Count"
+        ),
+        yaxis=dict(
+            gridcolor='rgba(148, 163, 184, 0.3)', 
+            color="#1e293b",
+            title_font_size=18,
+            tickfont_size=14,
+            title="Patient Count"
         )
-        st.plotly_chart(fig_comorb, width='stretch')
+    )
+    st.plotly_chart(fig_comorb, use_container_width=True, height=700)
 
 elif view_mode == "Patient Deep Dive":
     st.markdown('<h2 class="section-header">Individual Patient Deep Dive</h2>', unsafe_allow_html=True)
@@ -2237,28 +2267,29 @@ else:  # Model Analytics
                 aspect="auto"
             )
             fig_corr.update_layout(
-                height=400,
+                height=600,  # Increased from 400
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(family="Inter", color="#1e293b"),
-                xaxis=dict(color="#1e293b", tickangle=45),
-                yaxis=dict(color="#1e293b"),
+                font=dict(family="Inter", color="#1e293b", size=12),  # Larger font
+                xaxis=dict(color="#1e293b", tickangle=45, tickfont=dict(size=11)),
+                yaxis=dict(color="#1e293b", tickfont=dict(size=11)),
                 title=dict(
-                    font=dict(size=14, color="#1e293b"),
+                    font=dict(size=16, color="#1e293b"),  # Larger title
                     x=0.5,
                     y=0.95
                 ),
-                margin=dict(t=60, b=60, l=60, r=60),
+                margin=dict(t=80, b=80, l=80, r=80),  # More margin
                 coloraxis_colorbar=dict(
                     bgcolor="rgba(255, 255, 255, 0.98)",
                     bordercolor="rgba(148, 163, 184, 0.3)",
                     borderwidth=1,
                     tickcolor="#1e293b",
-                    tickfont=dict(size=10),
-                    title=dict(text="Correlation", font=dict(size=12))
+                    tickfont=dict(size=11),  # Larger colorbar font
+                    title=dict(text="Correlation", font=dict(size=14)),
+                    thickness=20  # Wider colorbar
                 )
             )
-            st.plotly_chart(fig_corr, use_container_width=True)
+            st.plotly_chart(fig_corr, use_container_width=True, height=600)
     
     with tab2:
         # Global feature importance
@@ -2276,14 +2307,25 @@ else:  # Model Analytics
             color_discrete_sequence=['#10b981']
         )
         fig_importance.update_layout(
-            height=500,
+            height=600,  # Increased from 500
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family="Inter", color="#1e293b"),
-            xaxis=dict(gridcolor='rgba(148, 163, 184, 0.3)', color="#1e293b"),
-            yaxis=dict(color="#1e293b")
+            font=dict(family="Inter", color="#1e293b", size=12),  # Larger font
+            title=dict(font=dict(size=16, color="#1e293b")),  # Larger title
+            margin=dict(t=80, b=60, l=120, r=60),  # More margin for y-axis labels
+            xaxis=dict(
+                gridcolor='rgba(148, 163, 184, 0.3)', 
+                color="#1e293b",
+                tickfont=dict(size=11),
+                title_font=dict(size=14)
+            ),
+            yaxis=dict(
+                color="#1e293b",
+                tickfont=dict(size=11),
+                title_font=dict(size=14)
+            )
         )
-        st.plotly_chart(fig_importance, use_container_width=True)
+        st.plotly_chart(fig_importance, use_container_width=True, height=600)
         
         # SHAP summary plot
         st.subheader("SHAP Feature Impact Distribution")
@@ -2303,14 +2345,25 @@ else:  # Model Analytics
             color_discrete_sequence=['#10b981']
         )
         fig_violin.update_layout(
-            height=600,
+            height=700,  # Increased from 600
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family="Inter", color="#1e293b"),
-            xaxis=dict(gridcolor='rgba(148, 163, 184, 0.3)', color="#1e293b"),
-            yaxis=dict(color="#1e293b")
+            font=dict(family="Inter", color="#1e293b", size=12),  # Larger font
+            title=dict(font=dict(size=16, color="#1e293b")),  # Larger title
+            margin=dict(t=80, b=60, l=120, r=60),  # More margin
+            xaxis=dict(
+                gridcolor='rgba(148, 163, 184, 0.3)', 
+                color="#1e293b",
+                tickfont=dict(size=11),
+                title_font=dict(size=14)
+            ),
+            yaxis=dict(
+                color="#1e293b",
+                tickfont=dict(size=11),
+                title_font=dict(size=14)
+            )
         )
-        st.plotly_chart(fig_violin, use_container_width=True)
+        st.plotly_chart(fig_violin, use_container_width=True, height=700)
     
     with tab3:
         st.subheader("Model Decision Boundaries")

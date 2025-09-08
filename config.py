@@ -39,11 +39,11 @@ MODEL_CONFIG = {
     }
 }
 
-# Data Generation Settings
+# Data generation configuration
 DATA_CONFIG = {
-    'num_patients': 150,
-    'random_seed': 42,
-    'csv_filename': 'patient_data.csv'
+    'num_patients': 50000,
+    'csv_filename': 'patient_data.csv',
+    'time_series_days': 90
 }
 
 # Medical Reference Values

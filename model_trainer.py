@@ -153,7 +153,7 @@ class RiskPredictionModel:
             patient_data (dict, pd.Series, or pd.DataFrame): Patient features
             
         Returns:
-            float: Risk probability
+            float or array: Risk probability
         """
         if isinstance(patient_data, dict):
             # Convert dict to DataFrame
@@ -179,6 +179,32 @@ class RiskPredictionModel:
         ensemble_pred = 0.7 * xgb_pred + 0.3 * rf_pred
         
         return ensemble_pred[0] if len(ensemble_pred) == 1 else ensemble_pred
+    
+    def predict_batch(self, df):
+        """
+        Efficient batch prediction for large datasets.
+        
+        Args:
+            df (pd.DataFrame): DataFrame with patient features
+            
+        Returns:
+            np.array: Risk probabilities for all patients
+        """
+        # Ensure all required features are present
+        missing_cols = [col for col in self.feature_cols if col not in df.columns]
+        if missing_cols:
+            print(f"Warning: Missing features {missing_cols}")
+            return None
+        
+        # Scale features in batch
+        X_scaled = self.scaler.transform(df[self.feature_cols])
+        
+        # Generate ensemble predictions in batch
+        xgb_pred = self.xgb_model.predict_proba(X_scaled)[:, 1]
+        rf_pred = self.rf_model.predict_proba(X_scaled)[:, 1]
+        ensemble_pred = 0.7 * xgb_pred + 0.3 * rf_pred
+        
+        return ensemble_pred
     
     def get_feature_importance(self, model_type='ensemble'):
         """

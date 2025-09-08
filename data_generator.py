@@ -8,7 +8,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 
-def generate_comprehensive_patient_data(num_patients=150, save_to_csv=True, filename='patient_data.csv'):
+def generate_comprehensive_patient_data(num_patients=50000, save_to_csv=True, filename='patient_data.csv'):
     """
     Generates realistic chronic care patient data with multiple conditions and risk factors.
     
@@ -184,5 +184,5 @@ def generate_time_series_data(patient_id, metric_type='bp', days=84):
 if __name__ == "__main__":
     # Generate and save patient data
     print("Generating patient dataset...")
-    df = generate_comprehensive_patient_data(num_patients=150, save_to_csv=True)
+    df = generate_comprehensive_patient_data(num_patients=50000, save_to_csv=True)
     print("Dataset generation complete!")
