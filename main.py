@@ -2016,12 +2016,12 @@ elif view_mode == "Patient Deep Dive":
                 """, unsafe_allow_html=True)
                 
                 # SHAP values for this specific patient
-                patient_features = model_info['X'].iloc[patient_index:patient_index+1]
-                shap_values_patient = model_info['explainer'].shap_values(patient_features)
+                feature_names = model_info['feature_names']
+                shap_values_patient = model_info['shap_values'][patient_index:patient_index+1]
                 
                 # Create SHAP feature importance bar chart (alternative to waterfall)
                 feature_shap_df = pd.DataFrame({
-                    'Feature': model_info['feature_cols'],
+                    'Feature': feature_names,
                     'SHAP_Value': shap_values_patient[0],
                     'Impact': ['Increases Risk' if x > 0 else 'Decreases Risk' for x in shap_values_patient[0]]
                 }).sort_values('SHAP_Value', key=abs, ascending=False).head(8)
@@ -2060,9 +2060,9 @@ elif view_mode == "Patient Deep Dive":
                 
                 # Top risk factors for this patient
                 feature_importance = pd.DataFrame({
-                    'Feature': model_info['feature_cols'],
+                    'Feature': feature_names,
                     'SHAP_Value': shap_values_patient[0],
-                    'Patient_Value': patient_features.iloc[0].values
+                    'Patient_Value': patient_data[feature_names].values
                 }).sort_values('SHAP_Value', key=abs, ascending=False).head(5)
                 
                 for idx, row in feature_importance.iterrows():
@@ -2228,7 +2228,7 @@ else:  # Model Analytics
         
         with col2:
             # Feature correlation heatmap
-            feature_corr = df_patients[model_info['feature_cols']].corr()
+            feature_corr = df_patients[model_info['feature_names']].corr()
             
             fig_corr = px.imshow(
                 feature_corr,
@@ -2263,8 +2263,8 @@ else:  # Model Analytics
     with tab2:
         # Global feature importance
         feature_importance = pd.DataFrame({
-            'Feature': model_info['feature_cols'],
-            'Importance': model_info['xgb_model'].feature_importances_
+            'Feature': model_info['feature_names'],
+            'Importance': trained_model.xgb_model.feature_importances_
         }).sort_values('Importance', ascending=False)
         
         fig_importance = px.bar(
@@ -2289,7 +2289,7 @@ else:  # Model Analytics
         st.subheader("SHAP Feature Impact Distribution")
         shap_summary_df = pd.DataFrame(
             model_info['shap_values'],
-            columns=model_info['feature_cols']
+            columns=model_info['feature_names']
         )
         
         # Create violin plot for SHAP values
