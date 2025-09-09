@@ -1,5 +1,5 @@
 """
-Model Training Module for Chronic Care Risk Prediction
+Model Training Module:
 Handles ML model training, evaluation, and SHAP analysis
 """
 

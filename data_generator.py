@@ -129,58 +129,6 @@ def generate_comprehensive_patient_data(num_patients=50000, save_to_csv=True, fi
     
     return df
 
-def generate_time_series_data(patient_id, metric_type='bp', days=84):
-    """
-    Generate time series data for patient monitoring charts.
-    
-    Args:
-        patient_id (str): Patient identifier
-        metric_type (str): Type of metric ('bp', 'hba1c', 'steps')
-        days (int): Number of days of data to generate
-        
-    Returns:
-        pd.DataFrame: Time series data
-    """
-    np.random.seed(hash(patient_id) % 2**32)
-    dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
-    
-    if metric_type == 'bp':
-        # Blood pressure with some trend and noise
-        trend = np.linspace(0, -5, days)  # Slight improvement over time
-        systolic = 145 + trend + np.random.normal(0, 8, days)
-        diastolic = 85 + trend * 0.6 + np.random.normal(0, 5, days)
-        
-        return pd.DataFrame({
-            'Date': dates,
-            'Systolic': systolic.round(0).astype(int),
-            'Diastolic': diastolic.round(0).astype(int)
-        })
-    
-    elif metric_type == 'hba1c':
-        # Quarterly HbA1c measurements
-        quarterly_dates = pd.date_range(end=datetime.now(), periods=4, freq='3M')
-        hba1c_values = 8.2 + np.cumsum(np.random.normal(-0.1, 0.3, 4))
-        hba1c_values = np.clip(hba1c_values, 6.0, 12.0)
-        
-        return pd.DataFrame({
-            'Date': quarterly_dates,
-            'HbA1c': hba1c_values.round(1)
-        })
-    
-    elif metric_type == 'steps':
-        # Daily step count with weekly patterns
-        base_steps = 4500
-        weekly_pattern = np.tile([0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 0.7], days // 7 + 1)[:days]
-        steps = base_steps * weekly_pattern + np.random.normal(0, 500, days)
-        steps = np.clip(steps, 1000, 12000).astype(int)
-        
-        return pd.DataFrame({
-            'Date': dates,
-            'Steps': steps
-        })
-    
-    return pd.DataFrame()
-
 if __name__ == "__main__":
     # Generate and save patient data
     print("Generating patient dataset...")
