@@ -1,32 +1,17 @@
-# Modular imports for streamlined architecture
+# Streamlined imports for optimized performance
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import warnings
 warnings.filterwarnings('ignore')
 
-# Import custom modules
-from config import (
-    APP_CONFIG, THEME_CONFIG, MODEL_CONFIG, DATA_CONFIG, NAVIGATION_OPTIONS,
-    get_custom_css, apply_theme_config, get_risk_category, get_risk_color,
-    format_medical_value, DEFAULT_PATIENT
-)
+# Import only essential custom modules
+from config import APP_CONFIG, DATA_CONFIG, apply_theme_config
 from data_generator import generate_comprehensive_patient_data, generate_time_series_data
 from model_trainer import RiskPredictionModel, train_risk_prediction_models
-from visualization import (
-    create_risk_distribution_chart, create_age_risk_scatter, create_adherence_risk_chart,
-    create_comorbidity_analysis, create_patient_timeline_chart, create_feature_importance_chart,
-    create_risk_category_pie_chart, create_condition_risk_analysis
-)
-from utils import (
-    create_metric_card, display_risk_indicator, create_sidebar_section,
-    format_patient_summary, assess_clinical_values, display_clinical_assessment,
-    calculate_summary_statistics, create_patient_selector, generate_recommendations,
-    export_patient_report
-)
+from utils import calculate_summary_statistics, create_patient_selector, generate_recommendations
 
 # App configuration
 st.set_page_config(**APP_CONFIG)
@@ -36,7 +21,7 @@ apply_theme_config()
 
 # Initialize session state for navigation
 if 'current_page' not in st.session_state:
-    st.session_state.current_page = "📊 Dashboard Overview"
+    st.session_state.current_page = "Dashboard Overview"
 
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
@@ -201,7 +186,6 @@ df_patients, model_info, trained_model = load_trained_model()
 # Calculate summary statistics
 summary_stats = calculate_summary_statistics(df_patients)
 
-# --- PROFESSIONAL DASHBOARD UI ---
 
 # Professional styling and layout configuration
 st.markdown("""
@@ -1235,7 +1219,7 @@ else:
     """, unsafe_allow_html=True)
     
     view_mode = st.selectbox(
-        "📍 Quick Navigation", 
+        "Quick Navigation", 
         ["Cohort Overview", "Patient Deep Dive", "Model Analytics"],
         index=0,
         help="Choose your dashboard view when sidebar is collapsed"
@@ -1457,7 +1441,7 @@ if view_mode == "Cohort Overview":
     <div class="section-header" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); border: 1px solid rgba(148, 163, 184, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-                <h2 style="margin: 0; font-size: 2rem; font-weight: 700;">📊 Patient Risk Dashboard</h2>
+                <h2 style="margin: 0; font-size: 2rem; font-weight: 700;">Patient Risk Dashboard</h2>
                 <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 1rem;">Risk Stratification & Analytics for 50,000 Patients</p>
             </div>
             <div style="display: flex; gap: 1rem; align-items: center;">
@@ -1485,7 +1469,7 @@ if view_mode == "Cohort Overview":
     <div class="section-header" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); border: 1px solid rgba(148, 163, 184, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-                <h2 style="margin: 0; font-size: 2rem; font-weight: 700;">🔍 Advanced Risk Analytics</h2>
+                <h2 style="margin: 0; font-size: 2rem; font-weight: 700;">Advanced Risk Analytics</h2>
                 <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 1rem;">Large-Scale Predictive Insights & Clinical Correlations</p>
             </div>
         </div>
@@ -1499,7 +1483,7 @@ if view_mode == "Cohort Overview":
     # CHART 1: Age vs Risk Correlation (Large)
     st.markdown("""
     <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); margin-bottom: 3rem;">
-        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">📈 Age vs Risk Correlation Analysis</h3>
+        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">Age vs Risk Correlation Analysis</h3>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1552,7 +1536,7 @@ if view_mode == "Cohort Overview":
     # CHART 2: Medication Adherence Impact (Large)
     st.markdown("""
     <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); margin-bottom: 3rem;">
-        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">💊 Medication Adherence Impact Analysis</h3>
+        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">Medication Adherence Impact Analysis</h3>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1603,7 +1587,7 @@ if view_mode == "Cohort Overview":
     # CHART 3: Comorbidity Distribution & Risk Analysis (Large)
     st.markdown("""
     <div class="plot-container" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(30px); margin-bottom: 3rem;">
-        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">🏥 Comorbidity Distribution & Risk Analysis</h3>
+        <h3 style="margin: 0 0 2rem 0; font-size: 1.8rem; font-weight: 700; color: #1e293b; text-align: center;">Comorbidity Distribution & Risk Analysis</h3>
     </div>
     """, unsafe_allow_html=True)
     
