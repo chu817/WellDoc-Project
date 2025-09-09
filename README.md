@@ -6,6 +6,8 @@ An advanced AI-driven risk prediction dashboard for chronic care management, bui
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python)
 ![ML](https://img.shields.io/badge/ML-XGBoost%20%7C%20RandomForest-green?style=for-the-badge)
 
+![Image](https://github.com/user-attachments/assets/a0f13059-ad1b-45b2-b2e1-533f29c382c1)
+
 ## 🌟 Features
 
 ### 📊 **Cohort Overview Dashboard**
