@@ -1,6 +1,6 @@
-# 🏥 WellDoc AI Risk Prediction Engine
+# RiskWise: An AI Risk Prediction Engine
 
-An advanced AI-driven risk prediction dashboard for chronic care management, built with Streamlit and featuring sophisticated machine learning models for 90-day deterioration prediction.
+An AI-driven risk prediction dashboard for chronic care management, built with Streamlit and featuring sophisticated machine learning models for 90-day deterioration prediction.
 
 ![Dashboard Preview](https://img.shields.io/badge/Streamlit-Dashboard-red?style=for-the-badge&logo=streamlit)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python)
