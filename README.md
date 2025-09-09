@@ -8,33 +8,33 @@ An AI-driven risk prediction dashboard for chronic care management, built with S
 
 ![Image](https://github.com/user-attachments/assets/a0f13059-ad1b-45b2-b2e1-533f29c382c1)
 
-## 🌟 Features
+## Features
 
-### 📊 **Cohort Overview Dashboard**
+### **Cohort Overview Dashboard**
 - **Real-time Risk Stratification**: Interactive patient cohort analytics with immediate risk classification
 - **Professional Light Theme**: Clean, medical-grade interface optimized for clinical environments
 - **Advanced Visualizations**: Risk distribution charts, correlation analysis, and predictive insights
 - **Smart Table Rendering**: Dynamic patient tables with risk-based color coding and filtering
 
-### 👤 **Patient Deep Dive Analysis**  
+### **Patient Deep Dive Analysis**  
 - **Individual Risk Profiles**: Comprehensive patient-specific risk assessment and clinical summary
 - **Temporal Trends**: Blood pressure, HbA1c, and activity monitoring over time
 - **AI-Powered Insights**: SHAP-based explainable AI showing key risk factors for each patient
 - **Care Recommendations**: Personalized monitoring plans and intervention strategies
 
-### 🤖 **Model Analytics & Performance**
+### **Model Analytics & Performance**
 - **Ensemble ML Models**: XGBoost + Random Forest with 94.2% accuracy
 - **Feature Importance Analysis**: Global and patient-specific feature impact visualization
 - **Model Calibration**: Real-time performance metrics and calibration analysis
 - **Explainable AI**: SHAP values for transparent decision-making
 
-### 🎨 **Professional UI/UX**
+### **Professional UI/UX**
 - **Responsive Design**: Collapsible sidebar with smart navigation controls
 - **Glass Morphism**: Modern design with backdrop filters and subtle animations
 - **Accessible Interface**: High contrast ratios and clear typography for medical professionals
 - **Theme Consistency**: Light theme optimized for clinical workflows
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.9 or higher
@@ -67,7 +67,7 @@ An AI-driven risk prediction dashboard for chronic care management, built with S
 5. **Open in browser**
    Navigate to `http://localhost:8501` to access the dashboard
 
-## 📋 Requirements
+## Requirements
 
 ```
 streamlit>=1.28.0
@@ -81,7 +81,7 @@ xgboost>=1.7.0
 shap>=0.42.0
 ```
 
-## 🏗️ Architecture
+##  Architecture
 
 ### Data Pipeline
 - **Synthetic Patient Data**: Realistic chronic care patient simulation with clinical parameters
@@ -100,7 +100,7 @@ shap>=0.42.0
 - **Interactivity**: Real-time filtering, collapsible navigation, and responsive charts
 - **Performance**: Optimized rendering with smart caching and background processing
 
-## 📊 Dashboard Components
+## Dashboard Components
 
 ### 1. Navigation System
 - **Collapsible Sidebar**: Model performance metrics and patient cohort overview
@@ -118,7 +118,7 @@ shap>=0.42.0
 - **Trend Analysis**: Time-series visualizations for key health indicators
 - **Care Planning**: Personalized monitoring schedules and intervention recommendations
 
-## 🔧 Configuration
+##� Configuration
 
 ### Theme Customization
 The application uses a professional light theme optimized for medical environments. Key color scheme:
@@ -134,7 +134,7 @@ The application uses a professional light theme optimized for medical environmen
 - **Training Split**: 70/30 train-test split with stratification
 - **Update Frequency**: Real-time risk score recalculation
 
-## 🚑 Clinical Use Cases
+## Clinical Use Cases
 
 1. **Risk Stratification**: Identify high-risk patients requiring immediate intervention
 2. **Care Coordination**: Optimize resource allocation based on predicted deterioration risk
@@ -142,7 +142,7 @@ The application uses a professional light theme optimized for medical environmen
 4. **Clinical Decision Support**: Evidence-based recommendations for care planning
 5. **Quality Improvement**: Track intervention effectiveness and model performance
 
-## 🔬 Technical Details
+## Technical Details
 
 ### Performance Optimizations
 - **Caching**: Streamlit caching for data generation and model training
@@ -155,7 +155,7 @@ The application uses a professional light theme optimized for medical environmen
 - **Local Processing**: All computations performed client-side
 - **HIPAA Considerations**: Architecture designed for compliance with healthcare data requirements
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -182,4 +182,3 @@ For questions, issues, or contributions, please:
 
 ---
 
-**Built with ❤️ for healthcare innovation**
